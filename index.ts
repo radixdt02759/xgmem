@@ -1039,16 +1039,64 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     //     content: [{ type: "text", text: "Memory copied successfully" }],
     //   };
     // ===== CODE MEMORY TOOLS =====
+    // ===== CODE MEMORY TOOLS - SEQUENCE ORDER: track_file → search → save =====
+    
     case "code_memory_track_file": {
       await ensureOrchestratorInitialized();
-      const result = await memoryOrchestrator.trackFile(args.filePath as string);
+      
+      // === VALIDATION: code_memory_track_file ===
+      const filePath = args.filePath as string;
+      
+      // Check if filePath is provided
+      if (!filePath || filePath.trim().length === 0) {
+        throw new Error(
+          "VALIDATION ERROR: filePath is required.\n\n" +
+          "USAGE: code_memory_track_file must be called with an absolute file path.\n" +
+          "Example: { filePath: \"/Users/project/src/services/UserService.ts\" }\n\n" +
+          "SEQUENCE: This is Step 1 - must be called BEFORE code_memory_search or code_memory_save."
+        );
+      }
+      
+      // Check if path is absolute
+      if (!filePath.startsWith('/')) {
+        throw new Error(
+          "VALIDATION ERROR: filePath must be an absolute path starting with '/'.\n\n" +
+          `Received: "${filePath}"\n` +
+          `Expected format: "/absolute/path/to/file.ts"\n\n` +
+          "HINT: Use the full absolute path from your filesystem."
+        );
+      }
+      
+      // Check file extension
+      if (!filePath.endsWith('.ts') && !filePath.endsWith('.js')) {
+        throw new Error(
+          "VALIDATION ERROR: filePath must be a TypeScript (.ts) or JavaScript (.js) file.\n\n" +
+          `Received: "${filePath}"\n` +
+          "Supported extensions: .ts, .js\n\n" +
+          "HINT: Only TypeScript and JavaScript files can be tracked."
+        );
+      }
+      
+      // Attempt to check if file exists (if fs is available)
+      try {
+        await fs.access(filePath);
+      } catch {
+        throw new Error(
+          "VALIDATION ERROR: File does not exist or is not accessible.\n\n" +
+          `Path: "${filePath}"\n\n` +
+          "HINT: Verify the file path is correct and the file exists."
+        );
+      }
+      
+      const result = await memoryOrchestrator.trackFile(filePath);
       return {
         content: [{
           type: "text",
           text: JSON.stringify({
             status: result.type,
             entitiesFound: result.changes || 0,
-            message: result.type === 'full' ? 'File indexed' : 'File updated'
+            message: result.type === 'full' ? 'File indexed successfully' : 'File updated',
+            nextStep: "Use code_memory_search to find entities, then code_memory_save to document them."
           }, null, 2)
         }]
       };
@@ -1056,7 +1104,41 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     case "code_memory_search": {
       await ensureOrchestratorInitialized();
-      const results = await memoryOrchestrator.search(args.query as string);
+      
+      // === VALIDATION: code_memory_search ===
+      const query = args.query as string;
+      
+      // Check if query is provided
+      if (!query || query.trim().length === 0) {
+        throw new Error(
+          "VALIDATION ERROR: query is required.\n\n" +
+          "USAGE: Provide a search term to find code entities.\n" +
+          "Example: { query: \"UserService\" } or { query: \"calculate\" }\n\n" +
+          "SEQUENCE: This is Step 2 - use AFTER code_memory_track_file has indexed files."
+        );
+      }
+      
+      // Check minimum query length
+      if (query.trim().length < 2) {
+        throw new Error(
+          "VALIDATION ERROR: query must be at least 2 characters.\n\n" +
+          `Received: "${query}" (${query.length} character(s))\n` +
+          "Minimum required: 2 characters\n\n" +
+          "HINT: Use a more specific search term for better results."
+        );
+      }
+      
+      // Check maximum query length
+      if (query.length > 200) {
+        throw new Error(
+          "VALIDATION ERROR: query must not exceed 200 characters.\n\n" +
+          `Received: ${query.length} characters\n` +
+          "Maximum allowed: 200 characters\n\n" +
+          "HINT: Use a shorter, more focused search term."
+        );
+      }
+      
+      const results = await memoryOrchestrator.search(query);
       return {
         content: [{
           type: "text",
@@ -1064,10 +1146,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             results: results.map(r => ({
               name: r.entity.name,
               type: r.entity.type,
-              purpose: r.entity.context?.summary?.purpose || 'No description saved',
-              file: r.entity.filePath
+              purpose: r.entity.context?.summary?.purpose || 'No documentation saved yet',
+              file: r.entity.filePath,
+              hint: r.entity.context?.summary?.purpose 
+                ? undefined 
+                : "Use code_memory_save to add documentation for this entity"
             })),
-            count: results.length
+            count: results.length,
+            nextStep: results.length > 0 
+              ? "Use code_memory_save with the entity name from results to document it."
+              : "No results found. Try: 1) Track more files with code_memory_track_file, 2) Use different search terms."
           }, null, 2)
         }]
       };
@@ -1075,14 +1163,126 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     case "code_memory_save": {
       await ensureOrchestratorInitialized();
+      
+      // === VALIDATION: code_memory_save ===
+      const entityId = args.entityId as string;
+      const purpose = args.purpose as string;
+      const filePath = args.filePath as string | undefined;
+      
+      // Check if entityId is provided
+      if (!entityId || entityId.trim().length === 0) {
+        throw new Error(
+          "VALIDATION ERROR: entityId is required.\n\n" +
+          "USAGE: Provide the exact entity name from code_memory_search results.\n" +
+          "Example: { entityId: \"UserService\", purpose: \"...\" }\n\n" +
+          "SEQUENCE: This is Step 3 - use AFTER:\n" +
+          "1. code_memory_track_file (to index the file)\n" +
+          "2. code_memory_search (to find the entity name)"
+        );
+      }
+      
+      // Check if purpose is provided
+      if (!purpose) {
+        throw new Error(
+          "VALIDATION ERROR: purpose is required.\n\n" +
+          "USAGE: Provide comprehensive documentation explaining what the code does.\n\n" +
+          "REQUIRED SECTIONS:\n" +
+          "1. WHAT: What does this code do?\n" +
+          "2. HOW: How does it work? (steps/algorithm)\n" +
+          "3. DEPENDENCIES: Libraries and services used\n" +
+          "4. SIDE EFFECTS: State changes, DB writes, API calls\n" +
+          "5. WHY: Business context and purpose\n" +
+          "6. INPUTS/OUTPUTS: Parameters and return values\n" +
+          "7. ERROR HANDLING: How errors are handled"
+        );
+      }
+      
+      // Validate minimum documentation quality
+      const trimmedPurpose = purpose.trim();
+      if (trimmedPurpose.length < 50) {
+        throw new Error(
+          "VALIDATION ERROR: Documentation too short.\n\n" +
+          `Received: ${trimmedPurpose.length} characters\n` +
+          "Minimum required: 50 characters (recommended: 200-5000 words)\n\n" +
+          "YOUR DOCUMENTATION MUST INCLUDE:\n" +
+          "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
+          "1. WHAT: What does this code do? (high-level summary)\n" +
+          "2. HOW: How does it work? (key steps, algorithm, flow)\n" +
+          "3. DEPENDENCIES: What does it import/use?\n" +
+          "4. SIDE EFFECTS: What state changes? (DB, files, APIs)\n" +
+          "5. WHY: Why does this code exist? (business purpose)\n" +
+          "6. INPUTS/OUTPUTS: Parameters and return values\n" +
+          "7. ERROR HANDLING: How errors are handled\n" +
+          "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n" +
+          "EXAMPLE OF GOOD DOCUMENTATION:\n" +
+          "\"PaymentService handles all payment processing.\n\n" +
+          "WHAT IT DOES: Processes credit cards via Stripe, manages refunds.\n\n" +
+          "HOW IT WORKS:\n" +
+          "1. Validates payment amount\n" +
+          "2. Calls Stripe API to create PaymentIntent\n" +
+          "3. Stores transaction in database\n" +
+          "4. Emits payment.completed event\n\n" +
+          "DEPENDENCIES: stripe, pg, EventEmitter\n\n" +
+          "SIDE EFFECTS: Creates records in payments table, external API calls\n\n" +
+          "ERROR HANDLING: Throws PaymentDeclinedError for failures\"\n\n" +
+          "❌ BAD EXAMPLES (will be rejected):\n" +
+          "- \"Handles payments\" (too vague)\n" +
+          "- \"A service class\" (not descriptive)\n" +
+          "- \"Processes data\" (no specifics)"
+        );
+      }
+      
+      // Check for documentation quality indicators
+      const qualityIndicators = [
+        { keyword: /what|does|purpose|function/i, label: "WHAT it does" },
+        { keyword: /how|works|step|algorithm|flow|process/i, label: "HOW it works" },
+        { keyword: /depend|import|use|library|service|call/i, label: "DEPENDENCIES" },
+        { keyword: /side effect|state|database|db|api|write|emit|modif/i, label: "SIDE EFFECTS" },
+        { keyword: /why|reason|business|context|purpose/i, label: "WHY/Business context" }
+      ];
+      
+      const matchedIndicators = qualityIndicators.filter(ind => ind.keyword.test(trimmedPurpose));
+      
+      // Warn if documentation seems incomplete (but don't block)
+      let qualityWarning = "";
+      if (matchedIndicators.length < 3 && trimmedPurpose.length < 200) {
+        const missingIndicators = qualityIndicators
+          .filter(ind => !ind.keyword.test(trimmedPurpose))
+          .map(ind => ind.label);
+        
+        qualityWarning = `\n\nQUALITY NOTE: Your documentation may be missing:\n- ${missingIndicators.join('\n- ')}\n\nConsider adding these sections for more comprehensive documentation.`;
+      }
+      
       const success = await memoryOrchestrator.updateEntityPurpose(
-        args.entityId as string,
-        args.purpose as string
+        entityId,
+        trimmedPurpose
       );
+      
+      if (!success) {
+        throw new Error(
+          `ENTITY NOT FOUND: "${entityId}"\n\n` +
+          "The entity was not found in the tracked files.\n\n" +
+          "TROUBLESHOOTING:\n" +
+          "1. Did you run code_memory_track_file first?\n" +
+          "   → Track the file containing this entity\n\n" +
+          "2. Is the entity name correct?\n" +
+          "   → Use code_memory_search to find the exact name\n\n" +
+          "3. Is the file a .ts or .js file?\n" +
+          "   → Only TypeScript/JavaScript files are supported\n\n" +
+          "CORRECT SEQUENCE:\n" +
+          "1. code_memory_track_file → index the file\n" +
+          "2. code_memory_search → find entity name\n" +
+          "3. code_memory_save → save documentation"
+        );
+      }
+      
       return {
         content: [{ 
           type: "text", 
-          text: success ? "Saved" : "Entity not found - use code_memory_track_file first"
+          text: `✅ Successfully saved documentation for "${entityId}"\n\n` +
+            `Characters saved: ${trimmedPurpose.length}\n` +
+            `Quality indicators found: ${matchedIndicators.length}/5` +
+            qualityWarning
         }]
       };
     }
