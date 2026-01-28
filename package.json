@@ -21,7 +21,12 @@
     "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --watch"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "1.0.1"
+    "@babel/parser": "^7.28.6",
+    "@babel/traverse": "^7.28.6",
+    "@modelcontextprotocol/sdk": "1.0.1",
+    "diff": "^8.0.3",
+    "fuse.js": "^7.1.0",
+    "uuid": "^13.0.0"
   },
   "devDependencies": {
     "@types/jest": "^29.5.14",

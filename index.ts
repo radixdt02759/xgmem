@@ -10,6 +10,11 @@ import { promises as fs } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
+// Import new code memory system
+import { MemoryOrchestrator } from "./src/mcp/MemoryOrchestrator.js";
+import { codeMemoryTools } from "./src/mcp/tools.js";
+
+
 // Define memory directory path using environment variable with fallback
 const defaultMemoryDir = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -447,6 +452,20 @@ export class ProjectMemoryManager {
 
 const projectMemoryManager = new ProjectMemoryManager();
 
+// Initialize the new code memory system
+const CODE_MEMORY_STORE_PATH = process.env.CODE_MEMORY_STORE_PATH || path.join(MEMORY_DIR_PATH, 'code-memory');
+const memoryOrchestrator = new MemoryOrchestrator(CODE_MEMORY_STORE_PATH);
+
+// Initialize orchestrator (async, will be called before first use)
+let orchestratorInitialized = false;
+async function ensureOrchestratorInitialized() {
+  if (!orchestratorInitialized) {
+    await memoryOrchestrator.initialize();
+    orchestratorInitialized = true;
+  }
+}
+
+
 // The server instance and tools exposed to the model
 const server = new Server(
   {
@@ -564,178 +583,178 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {},
         },
       },
-      {
-        name: "create_entities",
-        description:
-          "Create multiple new entities in the project knowledge graph",
-        inputSchema: {
-          type: "object",
-          properties: {
-            projectId: {
-              type: "string",
-              description: "The project identifier",
-            },
-            entities: {
-              type: "array",
-              description: "An array of entities to create",
-              items: {
-                type: "object",
-                properties: {
-                  name: {
-                    type: "string",
-                    description: "The name of the entity",
-                  },
-                  entityType: {
-                    type: "string",
-                    description: "The type of the entity",
-                  },
-                  observations: {
-                    type: "array",
-                    items: { type: "string" },
-                    description:
-                      "An array of observation contents associated with the entity",
-                  },
-                },
-                required: ["name", "entityType", "observations"],
-              },
-            },
-          },
-          required: ["projectId", "entities"],
-        },
-      },
-      {
-        name: "create_relations",
-        description:
-          "Create multiple new relations between entities in the project knowledge graph",
-        inputSchema: {
-          type: "object",
-          properties: {
-            projectId: {
-              type: "string",
-              description: "The project identifier",
-            },
-            relations: {
-              type: "array",
-              description: "An array of relations to create",
-              items: {
-                type: "object",
-                properties: {
-                  from: {
-                    type: "string",
-                    description:
-                      "The name of the entity where the relation starts",
-                  },
-                  to: {
-                    type: "string",
-                    description:
-                      "The name of the entity where the relation ends",
-                  },
-                  relationType: {
-                    type: "string",
-                    description: "The type of the relation",
-                  },
-                },
-                required: ["from", "to", "relationType"],
-              },
-            },
-          },
-          required: ["projectId", "relations"],
-        },
-      },
-      {
-        name: "delete_entities",
-        description:
-          "Delete multiple entities and their associated relations from the project knowledge graph",
-        inputSchema: {
-          type: "object",
-          properties: {
-            projectId: {
-              type: "string",
-              description: "The project identifier",
-            },
-            entityNames: {
-              type: "array",
-              items: { type: "string" },
-              description: "An array of entity names to delete",
-            },
-          },
-          required: ["projectId", "entityNames"],
-        },
-      },
-      {
-        name: "delete_observations",
-        description:
-          "Delete specific observations from entities in the project knowledge graph",
-        inputSchema: {
-          type: "object",
-          properties: {
-            projectId: {
-              type: "string",
-              description: "The project identifier",
-            },
-            deletions: {
-              type: "array",
-              description: "An array of deletions to perform",
-              items: {
-                type: "object",
-                properties: {
-                  entityName: {
-                    type: "string",
-                    description:
-                      "The name of the entity containing the observations",
-                  },
-                  observations: {
-                    type: "array",
-                    items: { type: "string" },
-                    description: "An array of observations to delete",
-                  },
-                },
-                required: ["entityName", "observations"],
-              },
-            },
-          },
-          required: ["projectId", "deletions"],
-        },
-      },
-      {
-        name: "delete_relations",
-        description:
-          "Delete multiple relations from the project knowledge graph",
-        inputSchema: {
-          type: "object",
-          properties: {
-            projectId: {
-              type: "string",
-              description: "The project identifier",
-            },
-            relations: {
-              type: "array",
-              description: "An array of relations to delete",
-              items: {
-                type: "object",
-                properties: {
-                  from: {
-                    type: "string",
-                    description:
-                      "The name of the entity where the relation starts",
-                  },
-                  to: {
-                    type: "string",
-                    description:
-                      "The name of the entity where the relation ends",
-                  },
-                  relationType: {
-                    type: "string",
-                    description: "The type of the relation",
-                  },
-                },
-                required: ["from", "to", "relationType"],
-              },
-            },
-          },
-          required: ["projectId", "relations"],
-        },
-      },
+      // {
+      //   name: "create_entities",
+      //   description:
+      //     "Create multiple new entities in the project knowledge graph",
+      //   inputSchema: {
+      //     type: "object",
+      //     properties: {
+      //       projectId: {
+      //         type: "string",
+      //         description: "The project identifier",
+      //       },
+      //       entities: {
+      //         type: "array",
+      //         description: "An array of entities to create",
+      //         items: {
+      //           type: "object",
+      //           properties: {
+      //             name: {
+      //               type: "string",
+      //               description: "The name of the entity",
+      //             },
+      //             entityType: {
+      //               type: "string",
+      //               description: "The type of the entity",
+      //             },
+      //             observations: {
+      //               type: "array",
+      //               items: { type: "string" },
+      //               description:
+      //                 "An array of observation contents associated with the entity",
+      //             },
+      //           },
+      //           required: ["name", "entityType", "observations"],
+      //         },
+      //       },
+      //     },
+      //     required: ["projectId", "entities"],
+      //   },
+      // },
+      // {
+      //   name: "create_relations",
+      //   description:
+      //     "Create multiple new relations between entities in the project knowledge graph",
+      //   inputSchema: {
+      //     type: "object",
+      //     properties: {
+      //       projectId: {
+      //         type: "string",
+      //         description: "The project identifier",
+      //       },
+      //       relations: {
+      //         type: "array",
+      //         description: "An array of relations to create",
+      //         items: {
+      //           type: "object",
+      //           properties: {
+      //             from: {
+      //               type: "string",
+      //               description:
+      //                 "The name of the entity where the relation starts",
+      //             },
+      //             to: {
+      //               type: "string",
+      //               description:
+      //                 "The name of the entity where the relation ends",
+      //             },
+      //             relationType: {
+      //               type: "string",
+      //               description: "The type of the relation",
+      //             },
+      //           },
+      //           required: ["from", "to", "relationType"],
+      //         },
+      //       },
+      //     },
+      //     required: ["projectId", "relations"],
+      //   },
+      // },
+      // {
+      //   name: "delete_entities",
+      //   description:
+      //     "Delete multiple entities and their associated relations from the project knowledge graph",
+      //   inputSchema: {
+      //     type: "object",
+      //     properties: {
+      //       projectId: {
+      //         type: "string",
+      //         description: "The project identifier",
+      //       },
+      //       entityNames: {
+      //         type: "array",
+      //         items: { type: "string" },
+      //         description: "An array of entity names to delete",
+      //       },
+      //     },
+      //     required: ["projectId", "entityNames"],
+      //   },
+      // },
+      // {
+      //   name: "delete_observations",
+      //   description:
+      //     "Delete specific observations from entities in the project knowledge graph",
+      //   inputSchema: {
+      //     type: "object",
+      //     properties: {
+      //       projectId: {
+      //         type: "string",
+      //         description: "The project identifier",
+      //       },
+      //       deletions: {
+      //         type: "array",
+      //         description: "An array of deletions to perform",
+      //         items: {
+      //           type: "object",
+      //           properties: {
+      //             entityName: {
+      //               type: "string",
+      //               description:
+      //                 "The name of the entity containing the observations",
+      //             },
+      //             observations: {
+      //               type: "array",
+      //               items: { type: "string" },
+      //               description: "An array of observations to delete",
+      //             },
+      //           },
+      //           required: ["entityName", "observations"],
+      //         },
+      //       },
+      //     },
+      //     required: ["projectId", "deletions"],
+      //   },
+      // },
+      // {
+      //   name: "delete_relations",
+      //   description:
+      //     "Delete multiple relations from the project knowledge graph",
+      //   inputSchema: {
+      //     type: "object",
+      //     properties: {
+      //       projectId: {
+      //         type: "string",
+      //         description: "The project identifier",
+      //       },
+      //       relations: {
+      //         type: "array",
+      //         description: "An array of relations to delete",
+      //         items: {
+      //           type: "object",
+      //           properties: {
+      //             from: {
+      //               type: "string",
+      //               description:
+      //                 "The name of the entity where the relation starts",
+      //             },
+      //             to: {
+      //               type: "string",
+      //               description:
+      //                 "The name of the entity where the relation ends",
+      //             },
+      //             relationType: {
+      //               type: "string",
+      //               description: "The type of the relation",
+      //             },
+      //           },
+      //           required: ["from", "to", "relationType"],
+      //         },
+      //       },
+      //     },
+      //     required: ["projectId", "relations"],
+      //   },
+      // },
       {
         name: "read_graph",
         description: "Read the entire knowledge graph for a specific project",
@@ -786,50 +805,52 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ["query"],
         },
       },
-      {
-        name: "open_nodes",
-        description:
-          "Open specific nodes in a project's knowledge graph by their names",
-        inputSchema: {
-          type: "object",
-          properties: {
-            projectId: {
-              type: "string",
-              description: "The project identifier",
-            },
-            names: {
-              type: "array",
-              items: { type: "string" },
-              description: "An array of entity names to retrieve",
-            },
-          },
-          required: ["projectId", "names"],
-        },
-      },
-      {
-        name: "copy_memory",
-        description:
-          "Copy memory entities and their relations from one project to another",
-        inputSchema: {
-          type: "object",
-          properties: {
-            sourceProjectId: {
-              type: "string",
-              description: "The source project identifier",
-            },
-            targetProjectId: {
-              type: "string",
-              description: "The target project identifier",
-            },
-            entityNames: {
-              type: "array",
-              items: { type: "string" },
-              description: "An array of entity names to copy",
-            },
-          },
-          required: ["sourceProjectId", "targetProjectId", "entityNames"],
-        },
-      },
+      // {
+      //   name: "open_nodes",
+      //   description:
+      //     "Open specific nodes in a project's knowledge graph by their names",
+      //   inputSchema: {
+      //     type: "object",
+      //     properties: {
+      //       projectId: {
+      //         type: "string",
+      //         description: "The project identifier",
+      //       },
+      //       names: {
+      //         type: "array",
+      //         items: { type: "string" },
+      //         description: "An array of entity names to retrieve",
+      //       },
+      //     },
+      //     required: ["projectId", "names"],
+      //   },
+      // },
+      // {
+      //   name: "copy_memory",
+      //   description:
+      //     "Copy memory entities and their relations from one project to another",
+      //   inputSchema: {
+      //     type: "object",
+      //     properties: {
+      //       sourceProjectId: {
+      //         type: "string",
+      //         description: "The source project identifier",
+      //       },
+      //       targetProjectId: {
+      //         type: "string",
+      //         description: "The target project identifier",
+      //       },
+      //       entityNames: {
+      //         type: "array",
+      //         items: { type: "string" },
+      //         description: "An array of entity names to copy",
+      //       },
+      //     },
+      //     required: ["sourceProjectId", "targetProjectId", "entityNames"],
+      //   },
+      // },
+      // Add new code memory tools
+      ...codeMemoryTools
     ],
   };
 });
@@ -855,22 +876,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           },
         ],
       };
-    case "create_entities":
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(
-              await projectMemoryManager.createEntities(
-                args.projectId as string,
-                args.entities as Entity[]
-              ),
-              null,
-              2
-            ),
-          },
-        ],
-      };
+    // case "create_entities":
+    //   return {
+    //     content: [
+    //       {
+    //         type: "text",
+    //         text: JSON.stringify(
+    //           await projectMemoryManager.createEntities(
+    //             args.projectId as string,
+    //             args.entities as Entity[]
+    //           ),
+    //           null,
+    //           2
+    //         ),
+    //       },
+    //     ],
+    //   };
     case "save_project_observations":
       // Add project-based observations (not knowledge graph)
       await projectMemoryManager.saveProjectObservations(
@@ -924,30 +945,30 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           },
         ],
       };
-    case "delete_entities":
-      await projectMemoryManager.deleteEntities(
-        args.projectId as string,
-        args.entityNames as string[]
-      );
-      return {
-        content: [{ type: "text", text: "Entities deleted successfully" }],
-      };
-    case "delete_observations":
-      await projectMemoryManager.deleteObservations(
-        args.projectId as string,
-        args.deletions as { entityName: string; observations: string[] }[]
-      );
-      return {
-        content: [{ type: "text", text: "Observations deleted successfully" }],
-      };
-    case "delete_relations":
-      await projectMemoryManager.deleteRelations(
-        args.projectId as string,
-        args.relations as Relation[]
-      );
-      return {
-        content: [{ type: "text", text: "Relations deleted successfully" }],
-      };
+    // case "delete_entities":
+    //   await projectMemoryManager.deleteEntities(
+    //     args.projectId as string,
+    //     args.entityNames as string[]
+    //   );
+    //   return {
+    //     content: [{ type: "text", text: "Entities deleted successfully" }],
+    //   };
+    // case "delete_observations":
+    //   await projectMemoryManager.deleteObservations(
+    //     args.projectId as string,
+    //     args.deletions as { entityName: string; observations: string[] }[]
+    //   );
+    //   return {
+    //     content: [{ type: "text", text: "Observations deleted successfully" }],
+    //   };
+    // case "delete_relations":
+    //   await projectMemoryManager.deleteRelations(
+    //     args.projectId as string,
+    //     args.relations as Relation[]
+    //   );
+    //   return {
+    //     content: [{ type: "text", text: "Relations deleted successfully" }],
+    //   };
     case "read_graph":
       return {
         content: [
@@ -992,35 +1013,86 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           },
         ],
       };
-    case "open_nodes":
+    // case "open_nodes":
+    //   return {
+    //     content: [
+    //       {
+    //         type: "text",
+    //         text: JSON.stringify(
+    //           await projectMemoryManager.openNodes(
+    //             args.projectId as string,
+    //             args.names as string[]
+    //           ),
+    //           null,
+    //           2
+    //         ),
+    //       },
+    //     ],
+    //   };
+    // case "copy_memory":
+    //   await projectMemoryManager.copyMemory(
+    //     args.sourceProjectId as string,
+    //     args.targetProjectId as string,
+    //     args.entityNames as string[]
+    //   );
+    //   return {
+    //     content: [{ type: "text", text: "Memory copied successfully" }],
+    //   };
+    // ===== CODE MEMORY TOOLS =====
+    case "code_memory_track_file": {
+      await ensureOrchestratorInitialized();
+      const result = await memoryOrchestrator.trackFile(args.filePath as string);
       return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(
-              await projectMemoryManager.openNodes(
-                args.projectId as string,
-                args.names as string[]
-              ),
-              null,
-              2
-            ),
-          },
-        ],
+        content: [{
+          type: "text",
+          text: JSON.stringify({
+            status: result.type,
+            entitiesFound: result.changes || 0,
+            message: result.type === 'full' ? 'File indexed' : 'File updated'
+          }, null, 2)
+        }]
       };
-    case "copy_memory":
-      await projectMemoryManager.copyMemory(
-        args.sourceProjectId as string,
-        args.targetProjectId as string,
-        args.entityNames as string[]
+    }
+
+    case "code_memory_search": {
+      await ensureOrchestratorInitialized();
+      const results = await memoryOrchestrator.search(args.query as string);
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify({
+            results: results.map(r => ({
+              name: r.entity.name,
+              type: r.entity.type,
+              purpose: r.entity.context?.summary?.purpose || 'No description saved',
+              file: r.entity.filePath
+            })),
+            count: results.length
+          }, null, 2)
+        }]
+      };
+    }
+
+    case "code_memory_save": {
+      await ensureOrchestratorInitialized();
+      const success = await memoryOrchestrator.updateEntityPurpose(
+        args.entityId as string,
+        args.purpose as string
       );
       return {
-        content: [{ type: "text", text: "Memory copied successfully" }],
+        content: [{ 
+          type: "text", 
+          text: success ? "Saved" : "Entity not found - use code_memory_track_file first"
+        }]
       };
+    }
+
     default:
       throw new Error(`Unknown tool: ${name}`);
   }
 });
+
+
 
 async function main() {
   const transport = new StdioServerTransport();
